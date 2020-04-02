@@ -1,6 +1,6 @@
+use itertools::{Itertools, Position};
 use ndarray::{Array2, Axis};
 use std::num::NonZeroUsize;
-use circular_queue::CircularQueue;
 
 #[derive(Clone, PartialEq, Eq)]
 enum BareOp {
@@ -66,7 +66,7 @@ fn diff_ops<T: Copy + PartialEq>(
                     cost[[i - 1, j - 1]],
                 )
             } else {
-                opsel_min(cost[[i - 1, j]] + 1, cost[[i, j - 1]] + 1, usize::MAX)
+                opsel_min(cost[[i - 1, j]] + 1, cost[[i, j - 1]] + 1, std::usize::MAX)
             };
 
             dir[[i, j]] = k;
@@ -112,8 +112,16 @@ fn diff_ops<T: Copy + PartialEq>(
     ops
 }
 
-fn diff(a: &[&str], b: &[&str]) {
-    let mut ops = diff_ops(
+struct Hunk<'a> {
+    a_start: usize,
+    b_start: usize,
+    a: &'a [&'a str],
+    b: &'a [&'a str],
+    ops: Vec<Op<&'a str>>,
+}
+
+fn diff<'a>(a: &'a [&'a str], b: &'a [&'a str]) -> Vec<Hunk<'a>> {
+    let ops = diff_ops(
         &a,
         &b,
         |a, b| {
@@ -129,35 +137,87 @@ fn diff(a: &[&str], b: &[&str]) {
         |a| !a.chars().all(|c| c.is_numeric()),
     );
 
-    let mut buf = CircularQueue::with_capacity(6);
-    let print_buf = |buf: &mut CircularQueue<&str>| {
-        for b in buf.asc_iter() {
-            println!("  {}", b);
-        }
-        buf.clear();
-    };
+    const EXTRA_LINES: usize = 3;
+
+    let mut hunks = vec![];
     let (mut a, mut b) = (a.iter(), b.iter());
-    for op in ops {
-        print_buf(&mut buf);
-        match op {
-            Op::Nop(count) => {
-                let n = count.get() - 1;
-                for l in a.by_ref().take(n + 1) {
-                    buf.push(l);
-                }
-                b.nth(n).unwrap();
-            }
-            Op::Ins(_) => {
-                println!("{}+ {}{}", termion::color::Fg(termion::color::Green), b.next().unwrap(), termion::style::Reset);
-            }
-            Op::Del(_) => {
-                println!("{}- {}{}", termion::color::Fg(termion::color::Red), a.next().unwrap(), termion::style::Reset);
-            }
-        }
+    for idx in 0..ops.len() {
+        // if nop {
+        //     if let Some(Position::Only(Op::Nop(count))) = group.with_position().next() {
+        //         let count = count.get();
+        //         if count < extra_lines {
+        //             pre_lines = a.by_ref().take(count).collect();
+        //             debug_assert!(pre_lines.len() == count);
+        //             b.nth(count - 1).unwrap();
+        //         } else {
+        //             a.nth(count - extra_lines).unwrap();
+        //             pre_lines = a.by_ref().take(extra_lines).collect();
+        //             b.nth(count - 1).unwrap();
+
+        //             a_line += count - extra_lines;
+        //             b_line += count - extra_lines;
+        //         }
+        //     } else {
+        //         unreachable!();
+        //     }
+        //     continue;
+        // }
+
+        // if !pre_lines.is_empty() {
+        //     print!("@@ -{},{} +{},{} @@", a_line + 1, a_diff, b_line + 1, b_diff);
+        //     for line in pre_lines.drain(..) {
+        //         println!(" {}", line);
+        //     }
+        // }
+
+        // for op in group {
+        //     match op {
+        //         Op::Nop(_) => unreachable!(),
+        //         Op::Ins(_) => {
+        //             println!(
+        //                 "{}+{}{}",
+        //                 termion::color::Fg(termion::color::Green),
+        //                 b.next().unwrap(),
+        //                 termion::style::Reset
+        //             );
+        //         }
+        //         Op::Del(_) => {
+        //             println!(
+        //                 "{}-{}{}",
+        //                 termion::color::Fg(termion::color::Red),
+        //                 a.next().unwrap(),
+        //                 termion::style::Reset
+        //             );
+        //         }
+        //     }
+        // }
     }
-    print_buf(&mut buf);
-    assert!(matches!((a.next(), b.next()), (None, None)));
+    debug_assert!(matches!((a.next(), b.next()), (None, None)));
+
+    hunks
 }
 
 fn main() {
+    let d = diff_ops(
+        &["foo", "noh", "goh", "bar"],
+        &["foo", "noh", "baz", "bar"],
+        |a, b| a == b,
+        |_| true,
+    );
+    println!("{:?}", d);
+
+    println!(
+        "{:?}",
+        diff_ops(
+            &"a132544x".chars().collect::<Vec<_>>(),
+            &"b1024x".chars().collect::<Vec<_>>(),
+            |a, b| a == b,
+            |a| !a.is_numeric()
+        )
+    );
+
+    diff(
+        &["foo", "bar2224", "baz5", "goz"][..],
+        &["foo", "bar234423", "qux3", "bip", "goz"][..],
+    );
 }
